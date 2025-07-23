@@ -1,0 +1,108 @@
+%清空命令窗口
+clc;
+%清空工作区的变量和值
+clear;
+%关闭所有程序运行过程中打开的绘图窗口，此处为绘图窗口。
+close all;
+%读取excel数据，
+data = xlsread('//Users/inere/Desktop/论文2/最终数据集/预处理/预处理后samples.xlsx','A1:ZL241') ;
+%data2=data(2:241,1:683);
+spec = data(2:end,1:681) ;
+Y=data(2:end,685);
+band=data(1,1:681) %读取波段数据
+x1=spec;
+y1=Y;
+%调用lasso函数，其中参数为（自变量x，因变量y，使用交叉验证，10折交叉验证，α，α=0为岭回归，α=1为lasso回归）；返回值为（b：权重系数，fitinfo:模型信息）
+[b,fitinfo] = lasso(x1,y1,'CV',10,'Alpha',1); 
+%画图
+axTrace = lassoPlot(b,fitinfo,'PlotType','Lambda','XScale','log');
+%为图像添加图例，位置在图的右侧外面
+legend('show','Location','EastOutside');
+axCV = lassoPlot(b,fitinfo,'PlotType','CV');
+%寻找最小误差对应的迭代次数
+lam1SE = fitinfo.Index1SE;
+%最小误差的值
+mse_1=fitinfo.MSE(lam1SE);
+%取最小误差对应的系数；b矩阵lam1SE列所有行
+mat=b(:,lam1SE);
+%寻找系数中的非零项（~=0为不等于0）
+[row1SE, ] = find(b(:,lam1SE)~=0);
+%计算原来的最小均方误差
+rhat = x1\y1;
+res = x1*rhat - y1;   
+MSEmin_real= res'*res/325; 
+%最小均方误差对应的迭代次数，上面误差是1se这里是mse
+lamMinMSE = fitinfo.IndexMinMSE;
+%主成分的系数
+matMinMSE = b(:,lamMinMSE);  
+%寻找非零自变量的下标（即主成分的下标）
+[rowMinMSE, ] = find(b(:,lamMinMSE)~=0);
+%两种计算误差方式使得所降成的维度不同，根据自己需求比较两个误差计算方式的差异选择留几个变量。
+if MSEmin_real <= mse_1
+    % 使用 MSEmin_real 计算方式
+    num_variables = length(rowMinMSE);
+else
+    % 使用 mse_1 计算方式
+    num_variables = length(row1SE);
+end
+
+% 打印所选择的变量数量
+
+disp(['保留的变量数量：', num2str(num_variables)]);
+% 判断最小均方误差的来源
+if MSEmin_real < mse_1
+    selected_vectors = spec(:, rowMinMSE);
+    selected_method = 'MinMSE';
+else
+    selected_vectors = spec(:, row1SE);
+    selected_method = '1SE';
+end
+
+% 打印被选出的向量矩阵的大小和所使用的方法
+disp(['被选出的向量矩阵大小：', num2str(size(selected_vectors))]);
+disp(['所使用的方法：', selected_method]);
+% 将选定样本矩阵导出到其他地方使用
+csvwrite('selected_variables_lasso_js.csv', selected_vectors); % 以CSV格式导出
+
+
+
+
+%% 提取被选择的变量索引（如 LASSO 最小MSE对应的变量集）
+selected_indices = rowMinMSE;  % rowMinMSE 应该是变量索引的行向量
+
+% 绘制原始光谱
+figure;
+plot(band, spec(1, :), 'b', 'LineWidth', 1.5);  % 第一条光谱线
+
+% 标记被选择的特征变量（波长）
+hold on;
+plot(band(selected_indices), spec(1, selected_indices), 'ro', 'MarkerSize', 8, 'LineWidth', 1.2);
+
+% 坐标与图例信息
+xlabel('Wavelength / cm^{-1}', 'FontSize', 12);
+ylabel('Reflectance', 'FontSize', 12);
+legend('Original Spectrum', 'Selected Feature Wavelength', 'Location', 'best');
+title('Spectral Plot with LASSO-Selected Wavelengths', 'FontSize', 14);
+grid off;
+
+
+
+
+%% 提取被选择的变量索引
+selected_indices = rowMinMSE; % 假设你使用的是 MinMSE 方式
+
+% 画出原始光谱图
+figure;
+plot(band, spec(1, :), 'b'); % 假设你想画第一个样本的光谱图
+
+% 在原始光谱图上绘制圆圈标记被选择的变量
+hold on;
+plot(band(selected_indices), spec(1, selected_indices), 'ro', 'MarkerSize', 8); % 使用红色圆圈标记被选择的变量
+xlabel('Wavelength/cm^{-1}');
+ylabel('Reflectance');
+%title('原始光谱图与LASSO选择的特征波长');
+legend('Original spectrum', 'Selected feature wavelength');
+grid on;
+
+
+
